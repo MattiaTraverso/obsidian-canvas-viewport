@@ -56,7 +56,7 @@ export default class CanvasViewportPlugin extends Plugin {
                 
                 if (!checking) {
                     const canvasView = canvasLeaves[0].view as CanvasView;
-                    this.restoreViewport(canvasView.file, true);
+                    this.restoreViewport(canvasView.file);
                 }
                 
                 return true;
@@ -109,16 +109,15 @@ export default class CanvasViewportPlugin extends Plugin {
                 // If this isn't a canvas file or was already open, we're done
                 if (!file || file.extension !== 'canvas' || wasAlreadyOpen) return;
 
-                new Notice('Canvas viewport restored');
                 await this.restoreViewport(file);
             })
         );
     }
 
-    private async restoreViewport(file: TFile, triggeredByCommand : boolean = false) {
+    private async restoreViewport(file: TFile) {
         const position = await this.loadSavedPosition(file);
         if (!position) {
-			if (triggeredByCommand) new Notice('No saved viewport position found');
+            new Notice('No saved viewport position found');
             return;
         }
 
@@ -128,13 +127,21 @@ export default class CanvasViewportPlugin extends Plugin {
 
             const canvasView = canvasLeaves[0].view as CanvasView;
             const canvas = canvasView.canvas;
-            canvas.tx = position.tx;
-            canvas.ty = position.ty;
-            canvas.tZoom = position.tZoom;
-            canvas.viewportChanged = true;
+            
+            // First adjust zoom
+            const currentZoom = canvas.tZoom;
+            const zoomDelta = position.tZoom - currentZoom;
+            (canvas as any).zoomBy(zoomDelta);
+            
+            // Then pan to position
+            (canvas as any).panTo(position.tx, position.ty);
+            
+            // Ensure everything is updated
+            (canvas as any).markViewportChanged();
             canvas.requestFrame();
         }, 0);
     }
+
 
     private async saveCurrentPosition(view: CanvasView) {
         if (!view?.file || !view?.canvas) return;
