@@ -121,25 +121,35 @@ export default class CanvasViewportPlugin extends Plugin {
             return;
         }
 
-        setTimeout(() => {
-            const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
-            if (canvasLeaves.length === 0) return;
+        new Notice('Canvas viewport restored');
+			
+		const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
+		if (canvasLeaves.length === 0) return;
 
-            const canvasView = canvasLeaves[0].view as CanvasView;
-            const canvas = canvasView.canvas;
-            
-            // First adjust zoom
-            const currentZoom = canvas.tZoom;
-            const zoomDelta = position.tZoom - currentZoom;
-            (canvas as any).zoomBy(zoomDelta);
-            
-            // Then pan to position
-            (canvas as any).panTo(position.tx, position.ty);
-            
-            // Ensure everything is updated
-            (canvas as any).markViewportChanged();
-            canvas.requestFrame();
-        }, 0);
+		const canvasView = canvasLeaves[0].view as CanvasView;
+		const canvas = canvasView.canvas;
+		
+		// First adjust zoom
+		const currentZoom = canvas.tZoom;
+		const zoomDelta = position.tZoom - currentZoom;
+
+		try {
+			(canvas as any).zoomBy(zoomDelta);
+		
+			// Then pan to position
+			(canvas as any).panTo(position.tx, position.ty);
+			
+			// Ensure everything is updated
+			(canvas as any).markViewportChanged();
+			canvas.requestFrame();
+			
+		} catch (error : any) {
+			console.error('Failed to restore viewport:', error);
+    	new Notice('Failed to restore viewport');
+		}
+
+		
+		
     }
 
 
