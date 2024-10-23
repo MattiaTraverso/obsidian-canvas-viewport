@@ -18,6 +18,8 @@ interface CanvasView extends View {
 }
 
 export default class CanvasViewportPlugin extends Plugin {
+    private openCanvasFiles: string[] = []; // Track file paths
+
     async onload() {
         this.addCommand({
             id: 'save-canvas-viewport',
@@ -41,6 +43,27 @@ export default class CanvasViewportPlugin extends Plugin {
         });
 
         this.addCommand({
+            id: 'restore-canvas-viewport',
+            name: 'Restore saved viewport position',
+            checkCallback: (checking) => {
+                const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
+                if (canvasLeaves.length === 0) {
+                    if (!checking) {
+                        new Notice('Please open a canvas first');
+                    }
+                    return false;
+                }
+                
+                if (!checking) {
+                    const canvasView = canvasLeaves[0].view as CanvasView;
+                    this.restoreViewport(canvasView.file, true);
+                }
+                
+                return true;
+            }
+        });
+
+        this.addCommand({
             id: 'delete-canvas-viewport',
             name: 'Delete saved viewport position',
             checkCallback: (checking) => {
@@ -54,7 +77,6 @@ export default class CanvasViewportPlugin extends Plugin {
                 
                 if (!checking) {
                     const canvasView = canvasLeaves[0].view as CanvasView;
-                    // Move the async operation inside
                     this.deleteSavedPosition(canvasView).then(deleted => {
                         if (deleted) {
                             new Notice('Canvas viewport position deleted');
@@ -68,27 +90,50 @@ export default class CanvasViewportPlugin extends Plugin {
             }
         });
 
+		// The file-open event is triggered not just when opening files, but also during 
+		// Canvas operations like copy/paste or deleting elements. These operations appear 
+		// to cause a reload which fires this event. To prevent unwanted viewport 
+		// restoration during these operations, we maintain a list of already-open canvas 
+		// files and only restore the viewport when a canvas is truly being opened for 
+		// the first time.
         this.registerEvent(
             this.app.workspace.on('file-open', async (file: TFile) => {
-                if (!file || file.extension !== 'canvas') return;
-                
-                const position = await this.loadSavedPosition(file);
-                if (!position) return;
+                // If this is a canvas file, check if we've already handled it
+                const wasAlreadyOpen = file?.extension === 'canvas' && this.openCanvasFiles.includes(file.path);
 
-                setTimeout(() => {
-                    const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
-                    if (canvasLeaves.length === 0) return;
+                // Always update our tracking array with current canvas files
+                const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
+                this.openCanvasFiles = canvasLeaves
+                    .map(leaf => (leaf.view as CanvasView).file.path);
 
-                    const canvasView = canvasLeaves[0].view as CanvasView;
-                    const canvas = canvasView.canvas;
-                    canvas.tx = position.tx;
-                    canvas.ty = position.ty;
-                    canvas.tZoom = position.tZoom;
-                    canvas.viewportChanged = true;
-                    canvas.requestFrame();
-                }, 100);
+                // If this isn't a canvas file or was already open, we're done
+                if (!file || file.extension !== 'canvas' || wasAlreadyOpen) return;
+
+                new Notice('Canvas viewport restored');
+                await this.restoreViewport(file);
             })
         );
+    }
+
+    private async restoreViewport(file: TFile, triggeredByCommand : boolean = false) {
+        const position = await this.loadSavedPosition(file);
+        if (!position) {
+			if (triggeredByCommand) new Notice('No saved viewport position found');
+            return;
+        }
+
+        setTimeout(() => {
+            const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
+            if (canvasLeaves.length === 0) return;
+
+            const canvasView = canvasLeaves[0].view as CanvasView;
+            const canvas = canvasView.canvas;
+            canvas.tx = position.tx;
+            canvas.ty = position.ty;
+            canvas.tZoom = position.tZoom;
+            canvas.viewportChanged = true;
+            canvas.requestFrame();
+        }, 0);
     }
 
     private async saveCurrentPosition(view: CanvasView) {
@@ -144,6 +189,6 @@ export default class CanvasViewportPlugin extends Plugin {
     }
 
     onunload() {
-        // Clean up any event listeners if needed
+        this.openCanvasFiles = [];
     }
 }
