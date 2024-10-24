@@ -59,7 +59,7 @@ export default class CanvasViewportPlugin extends Plugin {
 
         this.addCommand({
             id: 'save-canvas-viewport',
-            name: 'Save current viewport position',
+            name: 'Save current viewport',
             checkCallback: (checking) => {
                 const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
                 if (canvasLeaves.length === 0) {
@@ -80,7 +80,7 @@ export default class CanvasViewportPlugin extends Plugin {
 
         this.addCommand({
             id: 'restore-canvas-viewport',
-            name: 'Restore saved viewport position',
+            name: 'Restore saved viewport',
             checkCallback: (checking) => {
                 const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
                 if (canvasLeaves.length === 0) {
@@ -101,7 +101,7 @@ export default class CanvasViewportPlugin extends Plugin {
 
         this.addCommand({
             id: 'delete-canvas-viewport',
-            name: 'Delete saved viewport position',
+            name: 'Delete saved viewport',
             checkCallback: (checking) => {
                 const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
                 if (canvasLeaves.length === 0) {
@@ -115,11 +115,11 @@ export default class CanvasViewportPlugin extends Plugin {
                     const canvasView = canvasLeaves[0].view as CanvasView;
                     this.deleteSavedPosition(canvasView).then(deleted => {
                         if (deleted) {
-                            this.log(`Viewport position deleted for device: ${this.getViewportKey()}`);
-                            new Notice(`Canvas viewport position deleted for ${this.getViewportKey()}`);
+                            this.log(`viewport deleted for device: ${this.getViewportKey()}`);
+                            new Notice(`Canvas viewport deleted for ${this.getViewportKey()}`);
                         } else {
-                            this.log(`No viewport position found to delete for device: ${this.getViewportKey()}`);
-                            new Notice('No saved viewport position found');
+                            this.log(`No viewport found to delete for device: ${this.getViewportKey()}`);
+                            new Notice('No saved viewport found');
                         }
                     });
                 }
@@ -209,8 +209,8 @@ export default class CanvasViewportPlugin extends Plugin {
 
         const position = await this.loadSavedPosition(file);
         if (!position) {
-            this.log('No saved viewport position found');
-            new Notice('No saved viewport position found');
+            this.log('No saved viewport found');
+            new Notice('No saved viewport found');
             this.logGroupEnd();
             return;
         }
@@ -294,11 +294,11 @@ export default class CanvasViewportPlugin extends Plugin {
 
             await this.app.vault.modify(view.file, JSON.stringify(canvasData, null, 2));
             this.log('Position saved successfully');
-            new Notice('Canvas viewport position saved');
+            new Notice('Canvas viewport saved');
 
         } catch (error) {
-            console.error('Failed to save canvas viewport position:', error);
-            new Notice('Failed to save viewport position');
+            console.error('Failed to save canvas viewport:', error);
+            new Notice('Failed to save viewport');
         }
 
         this.logGroupEnd();
@@ -338,7 +338,7 @@ export default class CanvasViewportPlugin extends Plugin {
             this.logGroupEnd();
             return true;
         } catch (error) {
-            console.error('Failed to delete canvas viewport position:', error);
+            console.error('Failed to delete canvas viewport:', error);
             this.logGroupEnd();
             return false;
         }
@@ -359,7 +359,7 @@ export default class CanvasViewportPlugin extends Plugin {
             this.logGroupEnd();
             return position;
         } catch (error) {
-            console.error('Failed to load canvas viewport position:', error);
+            console.error('Failed to load canvas viewport:', error);
             this.logGroupEnd();
             return null;
         }
@@ -404,7 +404,7 @@ class CanvasViewportSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Global Viewport')
-            .setDesc('Use the same viewport position across all devices')
+            .setDesc('Use the same viewport across all devices')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.useGlobalViewport)
                 .onChange(async (value) => {
