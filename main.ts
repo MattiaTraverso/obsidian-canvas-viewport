@@ -54,7 +54,7 @@ export default class CanvasViewportPlugin extends Plugin {
     async onload() {
         await this.loadSettings();
         this.addSettingTab(new CanvasViewportSettingTab(this.app, this));
-        
+
         this.currentDevice = this.getDeviceIdentifier();
 
         this.addCommand({
@@ -68,12 +68,12 @@ export default class CanvasViewportPlugin extends Plugin {
                     }
                     return false;
                 }
-                
+
                 if (!checking) {
                     const canvasView = canvasLeaves[0].view as CanvasView;
                     this.saveCurrentPosition(canvasView);
                 }
-                
+
                 return true;
             }
         });
@@ -89,12 +89,12 @@ export default class CanvasViewportPlugin extends Plugin {
                     }
                     return false;
                 }
-                
+
                 if (!checking) {
                     const canvasView = canvasLeaves[0].view as CanvasView;
                     this.restoreViewport(canvasView.file);
                 }
-                
+
                 return true;
             }
         });
@@ -110,7 +110,7 @@ export default class CanvasViewportPlugin extends Plugin {
                     }
                     return false;
                 }
-                
+
                 if (!checking) {
                     const canvasView = canvasLeaves[0].view as CanvasView;
                     this.deleteSavedPosition(canvasView).then(deleted => {
@@ -123,7 +123,7 @@ export default class CanvasViewportPlugin extends Plugin {
                         }
                     });
                 }
-                
+
                 return true;
             }
         });
@@ -137,7 +137,7 @@ export default class CanvasViewportPlugin extends Plugin {
         this.registerEvent(
             this.app.workspace.on('file-open', async (file: TFile) => {
                 this.logGroup('Canvas Viewport Plugin - File Open Event');
-                
+
                 const wasAlreadyOpen = file?.extension === 'canvas' && this.openCanvasFiles.includes(file.path);
                 this.log('File path:', file?.path);
                 this.log('File type:', file?.extension);
@@ -167,9 +167,9 @@ export default class CanvasViewportPlugin extends Plugin {
 
     private getDeviceIdentifier(): string {
         this.logGroup('Canvas Viewport Plugin - Device Detection');
-        
+
         let deviceType = "Unknown";
-        
+
         if (Platform.isMacOS) {
             deviceType = "MacOS";
         } else if (Platform.isWin) {
@@ -177,14 +177,14 @@ export default class CanvasViewportPlugin extends Plugin {
         } else if (Platform.isLinux) {
             deviceType = "Linux";
         }
-        
+
         if (Platform.isMobile) {
             if (Platform.isPhone) {
                 deviceType += "_Phone";
             } else if (Platform.isTablet) {
                 deviceType += "_Tablet";
             }
-            
+
             if (Platform.isIosApp) {
                 deviceType = "iOS_" + deviceType;
             } else if (Platform.isAndroidApp) {
@@ -196,17 +196,17 @@ export default class CanvasViewportPlugin extends Plugin {
 
         const resolution = `${window.screen.width}x${window.screen.height}`;
         const pixelRatio = window.devicePixelRatio;
-        
+
         const deviceId = `${deviceType}_${resolution}@${pixelRatio}x`;
         this.log('Final device identifier:', deviceId);
-        
+
         this.logGroupEnd();
         return deviceId;
     }
 
     private async restoreViewport(file: TFile) {
         this.logGroup('Canvas Viewport Plugin - Restore Viewport');
-        
+
         const position = await this.loadSavedPosition(file);
         if (!position) {
             this.log('No saved viewport position found');
@@ -216,8 +216,10 @@ export default class CanvasViewportPlugin extends Plugin {
         }
 
         this.log('Loaded position:', position);
-        new Notice('Canvas viewport restored');
-            
+
+        // Add a small delay to ensure canvas is initialized
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         const canvasLeaves = this.app.workspace.getLeavesOfType('canvas');
         if (canvasLeaves.length === 0) {
             this.log('No canvas leaves found');
@@ -227,101 +229,112 @@ export default class CanvasViewportPlugin extends Plugin {
 
         const canvasView = canvasLeaves[0].view as CanvasView;
         const canvas = canvasView.canvas;
-        
+
+        // Ensure the canvas view is properly initialized
+        if (!canvas || typeof canvas.tZoom === 'undefined') {
+            this.log('Canvas not yet initialized');
+            this.logGroupEnd();
+            return;
+        }
+
         const currentZoom = canvas.tZoom;
         const zoomDelta = position.tZoom - currentZoom;
         this.log('Current zoom:', currentZoom);
         this.log('Target zoom:', position.tZoom);
         this.log('Zoom delta:', zoomDelta);
+        this.log('Current Position:', canvas.tx, canvas.ty);
+        this.log('Target Position', position);
 
         try {
-            this.log('Applying viewport changes...');
-            (canvas as any).zoomBy(zoomDelta);
-            (canvas as any).panTo(position.tx, position.ty);
-            (canvas as any).markViewportChanged();
-            canvas.requestFrame();
-            this.log('Viewport changes applied successfully');
-            
+            // Queue the viewport changes in the next animation frame
+            requestAnimationFrame(() => {
+                (canvas as any).zoomBy(zoomDelta);
+                (canvas as any).panTo(position.tx, position.ty);
+                (canvas as any).markViewportChanged();
+                canvas.requestFrame();
+                new Notice('Canvas viewport restored');
+                this.log('Viewport changes applied successfully');
+            });
         } catch (error) {
             console.error('Failed to restore viewport:', error);
             new Notice('Failed to restore viewport');
         }
-        
+
         this.logGroupEnd();
     }
 
     private async saveCurrentPosition(view: CanvasView) {
         this.logGroup('Canvas Viewport Plugin - Save Position');
-        
+
         if (!view?.file || !view?.canvas) {
             this.log('Invalid view or canvas');
             this.logGroupEnd();
             return;
         }
-        
+
         try {
             const content = await this.app.vault.read(view.file);
             const canvasData = JSON.parse(content);
-            
+
             if (!canvasData.viewports) {
                 this.log('Initializing viewports object');
                 canvasData.viewports = {};
             }
-            
+
             const position = {
                 tx: view.canvas.tx,
                 ty: view.canvas.ty,
                 tZoom: view.canvas.tZoom
             };
-            
+
             const viewportKey = this.getViewportKey();
             canvasData.viewports[viewportKey] = position;
             this.log('Saving position for:', viewportKey);
             this.log('Position:', position);
-            
+
             await this.app.vault.modify(view.file, JSON.stringify(canvasData, null, 2));
             this.log('Position saved successfully');
             new Notice('Canvas viewport position saved');
-            
+
         } catch (error) {
             console.error('Failed to save canvas viewport position:', error);
             new Notice('Failed to save viewport position');
         }
-        
+
         this.logGroupEnd();
     }
 
     private async deleteSavedPosition(view: CanvasView): Promise<boolean> {
         this.logGroup('Canvas Viewport Plugin - Delete Position');
-        
+
         if (!view?.file) {
             this.log('Invalid view');
             this.logGroupEnd();
             return false;
         }
-        
+
         try {
             const content = await this.app.vault.read(view.file);
             const canvasData = JSON.parse(content);
             const viewportKey = this.getViewportKey();
-            
+
             if (!canvasData.viewports?.[viewportKey]) {
                 this.log('No viewport found for:', viewportKey);
                 this.logGroupEnd();
                 return false;
             }
-            
+
             this.log('Deleting viewport for:', viewportKey);
             delete canvasData.viewports[viewportKey];
-            
+
             if (Object.keys(canvasData.viewports).length === 0) {
                 this.log('Removing empty viewports object');
                 delete canvasData.viewports;
             }
-            
+
             await this.app.vault.modify(view.file, JSON.stringify(canvasData, null, 2));
             this.log('Position deleted successfully');
-            
+
             this.logGroupEnd();
             return true;
         } catch (error) {
@@ -333,16 +346,16 @@ export default class CanvasViewportPlugin extends Plugin {
 
     private async loadSavedPosition(file: TFile): Promise<CameraPosition | null> {
         this.logGroup('Canvas Viewport Plugin - Load Position');
-        
+
         try {
             const content = await this.app.vault.read(file);
             const canvasData = JSON.parse(content);
             const viewportKey = this.getViewportKey();
             const position = canvasData.viewports?.[viewportKey] || null;
-            
+
             this.log('Loading position for:', viewportKey);
             this.log('Found position:', position);
-            
+
             this.logGroupEnd();
             return position;
         } catch (error) {
@@ -375,7 +388,7 @@ class CanvasViewportSettingTab extends PluginSettingTab {
     }
 
     display(): void {
-        const {containerEl} = this;
+        const { containerEl } = this;
 
         containerEl.empty();
 
